@@ -1,0 +1,74 @@
+<!doctype html><html><head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<title>GAMSD</title>
+<meta name=description content="computing scientist, engineering manager">
+<meta name=HandheldFriendly content="True">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<link rel=stylesheet type=text/css href=/css/style.css>
+<link href="http://fonts.googleapis.com/css?family=Lato:100,300,700,100italic,300italic,700italic|Source+Code+Pro:300,400,500,700|Bree+Serif" rel=stylesheet type=text/css>
+</head><body><header class=main-header>
+<nav class=main-nav>
+<a href=/>Home</a>
+<a href=/blog>Blog</a>
+<a href=/cv>CV</a>
+</nav>
+<div class=main-header-content>
+<h1 class=blog-title>GAMSD</h1>
+<h2 class=blog-description>computing scientist, engineering manager</h2>
+</div>
+</header><div id=content>
+<main aria-role=main>
+<h1>Beautiful collaborative presentations with reveal.js and Docker</h1>
+<time class=post-date datetime="2016-03-08 17:36:28 +0000 UTC">March 8, 2016</time>
+<div class=homepage-content>
+<p>Recently in a chat with my friend and manager at <a href=http://www.vivareal.com.br>VivaReal</a> <a href=https://twitter.com/luiscaguerrero>Luis Guerrero</a>, we caught ourselves discussing the best way to build presentations in a collaborative way. I rather build my presentations from code, using <a href=http://lab.hakim.se/reveal-js/>reveal.js</a>, that&rsquo;s how I am most productive. While I was building one of such presentations, though, Luis rightly pointed out that we didn&rsquo;t have a good setup to work on it as a team.</p>
+<p>Being a programmer, I knew I could make it better with not a lot of effort. I&rsquo;ve been playing with <a href=https://www.docker.com/>Docker</a> lately, so decided to give it a try. The results are quite interesting, see for yourself!</p>
+<blockquote>
+<p>From this point, I assume you are slightly familiar with Docker or working on a tech-savvy team. If you are not, I suggest you check out <a href=http://slides.com>slides.com for teams</a>, it is reveal.js as a service with tools to lower the barrier to entry for less tech-inclined people.</p>
+</blockquote>
+<h2 id=simple-markdown-based-presentations-in-two-steps>Simple markdown-based presentations in two steps</h2>
+<p>I&rsquo;m a big fan of <a href=https://daringfireball.net/projects/markdown/syntax#block>Markdown</a>. I use it a lot to structure thought, to write these blog posts and also to build presentations. Building presentations is the easiest. In two steps:</p>
+<ul>
+<li>Write a <code>slides.md</code> file, using <code>---</code> to separate the content for each slide (<a href=https://raw.githubusercontent.com/gamsd/dockerfiles/master/revealjs-md/example/slides.md>see example</a>)</li>
+<li>Let Docker set everything up for you in a single command from within the same directory:
+<pre tabindex=0><code>docker run -v `pwd`:/revealjs/md -p 8000:8000 -d gamsd/revealjs-md
+</code></pre></li>
+</ul>
+<p>Move your browser to <a href=http://192.168.99.100:8000>http://192.168.99.100:8000</a> and see what you&rsquo;ve just done. You can edit your file locally and refresh the browser to see the changes you make. If you need to use any images, put them under a <code>images/</code> folder and they&rsquo;ll be available to your presentation under <code>md/images/</code>. You can also use <code>--</code> as separator for data verticals and <code>Note:</code> to add speaker notes to any slide. Take a look at <a href=http://lab.hakim.se/reveal-js/>reveal.js</a>&rsquo;s site to see what verticals and speaker notes mean.</p>
+<blockquote>
+<p>If you&rsquo;re running Linux, you should probably point your browser to <a href=http://localhost:8000>http://localhost:8000</a>. If you&rsquo;re running <code>docker-machine</code> on a Mac, check out my last post on <a href=http://blog.gamsd.com/docker-machine-port-forwarding/>docker-machine networking, IPs and port forwarding</a>.</p>
+</blockquote>
+<p>The <code>slides.md</code> file is easy to write, can be versioned as source code and can be run as a presentation anywhere where Docker is set up.</p>
+<h2 id=rich-presentations-with-html-js-and-d3js>Rich presentations with HTML, JS and D3JS</h2>
+<p>Sometimes a simple static presentation will do. Other times we need more flexibility. In these ocasions I want to be able to use all the power I can get from HTML and JS, thus I built a more general docker image. The idea for this image is to push all of your presentations directory tree into a reveal.js ready container.</p>
+<p>So if I wanted to locally deploy and work on all my presentations, I could just clone my repo, move into my <code>talks</code> directory (see <a href=https://github.com/gamsd/gamsdcom/tree/master/revealjs/talks>https://github.com/gamsd/gamsdcom/tree/master/revealjs/talks</a>) and run:</p>
+<pre tabindex=0><code>docker run -d -p 8000:8000 -v `pwd`:/revealjs/talks gamsd/revealjs
+</code></pre><p>My talks would then be available under <a href=http://192.168.99.100:8000/talks>http://192.168.99.100:8000/talks</a>. Each folder is an independent reveal.js presentation and each of them can reference anything inside its own directory. This way you can use as much technology as you want. For example, you can have your presentation change itself based on real-time data or use in your slides the same data visualization components that you use in your reporting applications.</p>
+<p>You should only pay atention that your talks will be deployed under <code>/talks/{your-presentation-name}</code>, so your index.html files would need to reference reveal.js components two levels above itself. Instead of <code>&lt;script src="js/reveal.js">&lt;/script></code>, you would have <code>&lt;script src="../../js/reveal.js">&lt;/script></code>.</p>
+<p>You can find a complete example of a <a href=https://d3js.org/>D3.js</a>-ready reveal.js talk in <a href=https://github.com/gamsd/dockerfiles/tree/master/revealjs/examples>https://github.com/gamsd/dockerfiles/tree/master/revealjs/examples</a>. Follow the README and get started in no time!</p>
+<h2 id=collaborate>Collaborate!</h2>
+<p>So, this is it. No matter how complex your presentation is, if you&rsquo;re working on a highly-technical team you can build it from code using reveal.js. You can keep it versioned and collaborate on it as code using Github and can remove the burden of setting things up using readilly available Docker images.</p>
+<p>Granted, if your team is not that comfortable with HTML and JS, there are better alternatives like the already mentioned <a href=http://slides.com>slides.com</a> or the ubiquitous Google Docs. Choose accordingly!</p>
+<h2 id=enjoy>Enjoy!</h2>
+<p>Kudos to <a href=https://twitter.com/parente>Peter Parente</a>! The work depicted in this post is <strong>heavily</strong> based on his work, adapted to my own needs. Check out his <a href=https://mindtrove.info/a-reveal.js-docker-base-image-with-onbuild/>blog</a> and see how his solution works for you.</p>
+<p>Finally, what about your team? What do you use to build your presentations and collaborate on them? If you tried any of the examples in this post, what are your impressions and how do you think they could be made easier? Share your thoughts in the comments!</p>
+</div>
+</main>
+</div><footer class=site-footer>
+<section class=aligned>
+<a href=https://twitter.com/gamsd target=_blank>
+<img src=/img/twitter.png>
+</a>
+<a href=https://linkedin.com/in/gamsd target=_blank>
+<img src=/img/linkedin.png>
+</a>
+<a href=https://github.com/gamsd target=_blank>
+<img src=/img/github.png>
+</a>
+</section>
+<section class=post-meta>
+<time class=post-date datetime="2016-03-08 17:36:28 +0000 UTC">March 8, 2016</time>
+</section>
+</footer></body>
+</html>
