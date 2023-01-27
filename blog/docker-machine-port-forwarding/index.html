@@ -1,108 +1,22 @@
-<!doctype html><html><head>
-<meta charset=utf-8>
-<meta http-equiv=x-ua-compatible content="IE=edge">
-<title>GAMSD</title>
-<meta name=description content="computing scientist, engineering manager">
-<meta name=HandheldFriendly content="True">
-<meta name=viewport content="width=device-width,initial-scale=1">
-<link rel=stylesheet type=text/css href=/css/style.css>
-<link href="http://fonts.googleapis.com/css?family=Lato:100,300,700,100italic,300italic,700italic|Source+Code+Pro:300,400,500,700|Bree+Serif" rel=stylesheet type=text/css>
-</head><body><header class=main-header>
-<nav class=main-nav>
-<a href=/>Home</a>
+<!doctype html><html><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge"><title>GAMSD</title><meta name=description content="computing scientist, engineering manager"><meta name=HandheldFriendly content="True"><meta name=viewport content="width=device-width,initial-scale=1"><link rel=stylesheet type=text/css href=/css/style.css><link href='http://fonts.googleapis.com/css?family=Lato:100,300,700,100italic,300italic,700italic|Source+Code+Pro:300,400,500,700|Bree+Serif' rel=stylesheet type=text/css></head><body><header class=main-header><nav class=main-nav><a href=/>Home</a>
 <a href=/blog>Blog</a>
-<a href=/cv>CV</a>
-</nav>
-<div class=main-header-content>
-<h1 class=blog-title>GAMSD</h1>
-<h2 class=blog-description>computing scientist, engineering manager</h2>
-</div>
-</header><div id=content>
-<main aria-role=main>
-<h1>Communicating docker-machines over networked physical hosts</h1>
-<time class=post-date datetime="2016-03-01 02:50:25 +0000 UTC">March 1, 2016</time>
-<div class=homepage-content>
-<h3 id=the-problem>The problem</h3>
-<p>Here at <a href=http://www.vivareal.com.br>VivaReal</a> in Brazil we&rsquo;re doing a lot of Scala and <a href=http://akka.io/>Akka</a> development lately. We&rsquo;re also strong supports of <a href=https://www.docker.com/>Docker</a>. Usually, this combination yields great results, but as most of our team program on MacBooks, Docker sometimes gives us minor annoyances for not being native to OS X.</p>
-<p>This time I wanted to <a href=https://github.com/gamsd/downloader>build</a> an Akka Cluster in a Docker-based fashion and develop/test it across independent physical hosts over a network. It would be no problem if I was using Linux, running Docker natively, but those were Macs and we had a man-in-the-middle, <a href=https://docs.docker.com/machine/overview/>Docker Machine</a>.</p>
-<blockquote>
-<h6 id=tldr>TL;DR</h6>
-<p>To make your Docker container running on docker-machine accessible to other nodes in your host network, you need to not only map your docker-machine ports to your container ports using Docker&rsquo;s -p or -P parameters but also create a SSH tunnel from your host&rsquo;s ports to your docker-machine VM ports.</p>
-</blockquote>
-<h5 id=definitions>Definitions</h5>
-<blockquote>
-<p><strong>host:</strong> your physical machine, in this case, your Mac</p>
-<p><strong>docker-machine:</strong> your virtual machine where Docker will be run</p>
-<p><strong>docker-container:</strong> the Docker container which holds your application, for this sample case, a stock <a href=https://www.nginx.com/>NGINX</a>.</p>
-</blockquote>
-<h3 id=the-basics>The basics</h3>
-<p>First of all, you should make sure all hosts are connected to the same network and visible to each other. A simple <code>ping</code> will do. Also, you should check your firewall for any blocking rules that may prevent your machines from talking to each other in the ports you need. This is not Docker-specific, so I&rsquo;m not going into detail on this.</p>
-<p>Once you&rsquo;ve got the basics covered, it&rsquo;s time to start our NginX image.</p>
-<h3 id=running-nginx>Running NGINX</h3>
-<p>Assuming you have Docker up and running on your machine, running a NGINX server is as simple as:</p>
-<pre tabindex=0><code>&gt; docker run --name web -d nginx
-</code></pre><p>This will download the latest NGINX image from Docker Hub and get you a running server, but acessible only from within the image. This is not what we want, so we need to map our image&rsquo;s ports to our docker-machine ports.</p>
-<h3 id=accessing-nginx-through-docker-machine>Accessing NGINX through docker-machine</h3>
-<p>To make your container accessible, you need to map its ports to the docker-machine running it. The easiest way to do that is using the <code>-P</code> flag.</p>
-<pre tabindex=0><code>&gt; docker run --name web -P -d nginx
-</code></pre><p>This will map the exposed ports from your Docker container to ramdonly assigned ports on you docker-mahcine. If we want to retain control over which ports are mapped, we can use the <code>-p</code> parameters, as follows.</p>
-<pre tabindex=0><code>&gt; docker run --name web -p 8080:80 -d nginx
-</code></pre><blockquote>
-<p>The -p parameter works on a <code>docker-machine:docker-container</code> fashion. Here we map our docker-machine port 8080 to the port 80 in our NGINX container. You can find more about how <code>-p</code> and <code>-P</code> work reading the <a href=https://docs.docker.com/engine/reference/commandline/run/>official documentation</a>.</p>
-</blockquote>
-<p>At this point, we can already interact with our container, but with some limitations. It will only be accessible from your host machine and through your docker-machine IP. This is quite useful already but your application still won&rsquo;t be visible to other physical clients over your network. Try this from different hosts and see what you get:</p>
-<pre tabindex=0><code>&gt; curl -X GET http://192.168.99.100:8080
-</code></pre><blockquote>
-<p>You can find your docker-machine IP using <code>> docker-machine ip ${docker_machine_name}</code>. If you don&rsquo;t know your docker-machine&rsquo;s name, it&rsquo;s probably <code>default</code> running on <code>192.168.99.100</code>. You can find more about your docker-machines with <code>> docker-machine ls</code>.</p>
-</blockquote>
-<h3 id=mapping-ports-from-your-docker-machine-to-your-physical-host>Mapping ports from your docker-machine to your physical host</h3>
-<p>SSH tunnels to the rescue. As we are able to SSH into our docker-machines, we can also do some local port forwarding using it. My first attempt was something like:</p>
-<pre tabindex=0><code>&gt; docker_machine_name=&quot;default&quot;;
+<a href=/cv>CV</a></nav><div class=main-header-content><h1 class=blog-title>GAMSD</h1><h2 class=blog-description>computing scientist, engineering manager</h2></div></header><div id=content><main aria-role=main><h1>Communicating docker-machines over networked physical hosts</h1><time class=post-date datetime="2016-03-01 02:50:25 +0000 UTC">March 1, 2016</time><div class=homepage-content><h3 id=the-problem>The problem</h3><p>Here at <a href=http://www.vivareal.com.br>VivaReal</a> in Brazil we&rsquo;re doing a lot of Scala and <a href=http://akka.io/>Akka</a> development lately. We&rsquo;re also strong supports of <a href=https://www.docker.com/>Docker</a>. Usually, this combination yields great results, but as most of our team program on MacBooks, Docker sometimes gives us minor annoyances for not being native to OS X.</p><p>This time I wanted to <a href=https://github.com/gamsd/downloader>build</a> an Akka Cluster in a Docker-based fashion and develop/test it across independent physical hosts over a network. It would be no problem if I was using Linux, running Docker natively, but those were Macs and we had a man-in-the-middle, <a href=https://docs.docker.com/machine/overview/>Docker Machine</a>.</p><blockquote><h6 id=tldr>TL;DR</h6><p>To make your Docker container running on docker-machine accessible to other nodes in your host network, you need to not only map your docker-machine ports to your container ports using Docker&rsquo;s -p or -P parameters but also create a SSH tunnel from your host&rsquo;s ports to your docker-machine VM ports.</p></blockquote><h5 id=definitions>Definitions</h5><blockquote><p><strong>host:</strong> your physical machine, in this case, your Mac</p><p><strong>docker-machine:</strong> your virtual machine where Docker will be run</p><p><strong>docker-container:</strong> the Docker container which holds your application, for this sample case, a stock <a href=https://www.nginx.com/>NGINX</a>.</p></blockquote><h3 id=the-basics>The basics</h3><p>First of all, you should make sure all hosts are connected to the same network and visible to each other. A simple <code>ping</code> will do. Also, you should check your firewall for any blocking rules that may prevent your machines from talking to each other in the ports you need. This is not Docker-specific, so I&rsquo;m not going into detail on this.</p><p>Once you&rsquo;ve got the basics covered, it&rsquo;s time to start our NginX image.</p><h3 id=running-nginx>Running NGINX</h3><p>Assuming you have Docker up and running on your machine, running a NGINX server is as simple as:</p><pre tabindex=0><code>&gt; docker run --name web -d nginx
+</code></pre><p>This will download the latest NGINX image from Docker Hub and get you a running server, but acessible only from within the image. This is not what we want, so we need to map our image&rsquo;s ports to our docker-machine ports.</p><h3 id=accessing-nginx-through-docker-machine>Accessing NGINX through docker-machine</h3><p>To make your container accessible, you need to map its ports to the docker-machine running it. The easiest way to do that is using the <code>-P</code> flag.</p><pre tabindex=0><code>&gt; docker run --name web -P -d nginx
+</code></pre><p>This will map the exposed ports from your Docker container to ramdonly assigned ports on you docker-mahcine. If we want to retain control over which ports are mapped, we can use the <code>-p</code> parameters, as follows.</p><pre tabindex=0><code>&gt; docker run --name web -p 8080:80 -d nginx
+</code></pre><blockquote><p>The -p parameter works on a <code>docker-machine:docker-container</code> fashion. Here we map our docker-machine port 8080 to the port 80 in our NGINX container. You can find more about how <code>-p</code> and <code>-P</code> work reading the <a href=https://docs.docker.com/engine/reference/commandline/run/>official documentation</a>.</p></blockquote><p>At this point, we can already interact with our container, but with some limitations. It will only be accessible from your host machine and through your docker-machine IP. This is quite useful already but your application still won&rsquo;t be visible to other physical clients over your network. Try this from different hosts and see what you get:</p><pre tabindex=0><code>&gt; curl -X GET http://192.168.99.100:8080
+</code></pre><blockquote><p>You can find your docker-machine IP using <code>> docker-machine ip ${docker_machine_name}</code>. If you don&rsquo;t know your docker-machine&rsquo;s name, it&rsquo;s probably <code>default</code> running on <code>192.168.99.100</code>. You can find more about your docker-machines with <code>> docker-machine ls</code>.</p></blockquote><h3 id=mapping-ports-from-your-docker-machine-to-your-physical-host>Mapping ports from your docker-machine to your physical host</h3><p>SSH tunnels to the rescue. As we are able to SSH into our docker-machines, we can also do some local port forwarding using it. My first attempt was something like:</p><pre tabindex=0><code>&gt; docker_machine_name=&#34;default&#34;;
 &gt; docker_machine_ip=$(docker-machine ip $docker_machine_name);
 
 &gt; ssh -i ~/.docker/machine/machines/$(docker_machine_name)/id_rsa docker@$(docker_machine_ip) -N -L 8000:localhost:8080
-
-</code></pre><blockquote>
-<p>Don&rsquo;t wait for this command to exit. It&rsquo;ll run indefinetely until you kill it.</p>
-</blockquote>
-<p>With this we can forget the docker-machine IP and access our nginx server from our host through <code>http://localhost:8000</code>. But it&rsquo;s still not visible to the other physical machines in our network.</p>
-<p>SSH&rsquo;s <code>-L</code> flag takes 4 parameters. The first one, called <code>bind_address</code> is optional and often left empty, but the behaviour for when it&rsquo;s empty depends on another setting, <code>GatewayPorts</code> (see <a href=https://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man5/sshd_config.5.html>ssh_config</a> for details). By default, it&rsquo;s set to prevent remote hosts from connecting to forwarded ports.</p>
-<p>To allow for remote hosts connection without messing with global configurations, we can explicitly define our <code>bind_address</code> as our host IP or a wildcard, <code>'*'</code>. For a machine with IP <code>192.168.123.123</code>, we would have:</p>
-<pre tabindex=0><code>&gt; docker_machine_name=&quot;default&quot;;
+</code></pre><blockquote><p>Don&rsquo;t wait for this command to exit. It&rsquo;ll run indefinetely until you kill it.</p></blockquote><p>With this we can forget the docker-machine IP and access our nginx server from our host through <code>http://localhost:8000</code>. But it&rsquo;s still not visible to the other physical machines in our network.</p><p>SSH&rsquo;s <code>-L</code> flag takes 4 parameters. The first one, called <code>bind_address</code> is optional and often left empty, but the behaviour for when it&rsquo;s empty depends on another setting, <code>GatewayPorts</code> (see <a href=https://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man5/sshd_config.5.html>ssh_config</a> for details). By default, it&rsquo;s set to prevent remote hosts from connecting to forwarded ports.</p><p>To allow for remote hosts connection without messing with global configurations, we can explicitly define our <code>bind_address</code> as our host IP or a wildcard, <code>'*'</code>. For a machine with IP <code>192.168.123.123</code>, we would have:</p><pre tabindex=0><code>&gt; docker_machine_name=&#34;default&#34;;
 &gt; docker_machine_ip=$(docker-machine ip $docker_machine_name);
 
 &gt; ssh -i ~/.docker/machine/machines/$(docker_machine_name)/id_rsa docker@$(docker_machine_ip) -N -L 192.168.123.123:8000:localhost:8080
-</code></pre><p>Yay! We are able to access our Docker-deployed NGINX from any other host in our network, at last. :-)</p>
-<h3 id=making-the-forwarding-permanent-for-a-given-docker-machine>Making the forwarding permanent (for a given docker-machine)</h3>
-<p>The SSH solution works, but if you find yourself running it too often it may be a good idea to make the forwarding permanent. Recalling that docker-machine is pretty much a VirtualBox VM, we can use <code>VBoxManage</code> to configure it from our prompt. Remember to change the example <code>192.168.123.123</code> IP to your actual host IP.</p>
-<pre tabindex=0><code>&gt; docker_machine_name=&quot;default&quot;;
+</code></pre><p>Yay! We are able to access our Docker-deployed NGINX from any other host in our network, at last. :-)</p><h3 id=making-the-forwarding-permanent-for-a-given-docker-machine>Making the forwarding permanent (for a given docker-machine)</h3><p>The SSH solution works, but if you find yourself running it too often it may be a good idea to make the forwarding permanent. Recalling that docker-machine is pretty much a VirtualBox VM, we can use <code>VBoxManage</code> to configure it from our prompt. Remember to change the example <code>192.168.123.123</code> IP to your actual host IP.</p><pre tabindex=0><code>&gt; docker_machine_name=&#34;default&#34;;
 &gt; docker_machine_ip=$(docker-machine ip $docker_machine_name);
 
-&gt; VBoxManage controlvm $(docker_machine_name) natpf1 &quot;tcp-port8080,tcp,192.168.123.123,8000,localhost,8080&quot;
-</code></pre><p>These settings will live for as long as the docker-machine running on VirtualBox lives. If, for any reason you need to revert these forwardings, you can use:</p>
-<pre tabindex=0><code>&gt; VBoxManage controlvm $(docker_machine_name) natpf1 delete &quot;tcp-port8080&quot;
-</code></pre><blockquote>
-<p>If your docker-machine VM is not running, you need to change <code>controlvm</code> to <code>modifyvm</code>.</p>
-</blockquote>
-<p>##That&rsquo;s all</p>
-<p>With the networking issues out of the way, you can go on and build your great containerized applications on Mac OSX. Myself, I&rsquo;m diving right back into my Akka Cluster configuration with automatic seed node discovery, everything on top of Docker.</p>
-<p><em>This post was cross-posted on <a href=http://engenharia.vivareal.com.br/docker-machine-port-forwarding/>VivaReal&rsquo;s Engineering Blog</a>, where you can find more about how we&rsquo;re using technology to change the real estate market in Brazil.</em></p>
-</div>
-</main>
-</div><footer class=site-footer>
-<section class=aligned>
-<a href=https://twitter.com/gamsd target=_blank>
-<img src=/img/twitter.png>
-</a>
-<a href=https://linkedin.com/in/gamsd target=_blank>
-<img src=/img/linkedin.png>
-</a>
-<a href=https://github.com/gamsd target=_blank>
-<img src=/img/github.png>
-</a>
-</section>
-<section class=post-meta>
-<time class=post-date datetime="2016-03-01 02:50:25 +0000 UTC">March 1, 2016</time>
-</section>
-</footer></body>
-</html>
+&gt; VBoxManage controlvm $(docker_machine_name) natpf1 &#34;tcp-port8080,tcp,192.168.123.123,8000,localhost,8080&#34;
+</code></pre><p>These settings will live for as long as the docker-machine running on VirtualBox lives. If, for any reason you need to revert these forwardings, you can use:</p><pre tabindex=0><code>&gt; VBoxManage controlvm $(docker_machine_name) natpf1 delete &#34;tcp-port8080&#34;
+</code></pre><blockquote><p>If your docker-machine VM is not running, you need to change <code>controlvm</code> to <code>modifyvm</code>.</p></blockquote><p>##That&rsquo;s all</p><p>With the networking issues out of the way, you can go on and build your great containerized applications on Mac OSX. Myself, I&rsquo;m diving right back into my Akka Cluster configuration with automatic seed node discovery, everything on top of Docker.</p><p><em>This post was cross-posted on <a href=http://engenharia.vivareal.com.br/docker-machine-port-forwarding/>VivaReal&rsquo;s Engineering Blog</a>, where you can find more about how we&rsquo;re using technology to change the real estate market in Brazil.</em></p></div></main></div><footer class=site-footer><section class=aligned><a href=https://twitter.com/gamsd target=_blank><img src=/img/twitter.png></a>
+<a href=https://linkedin.com/in/gamsd target=_blank><img src=/img/linkedin.png></a>
+<a href=https://github.com/gamsd target=_blank><img src=/img/github.png></a></section><section class=post-meta><time class=post-date datetime="2016-03-01 02:50:25 +0000 UTC">March 1, 2016</time></section></footer></body></html>
